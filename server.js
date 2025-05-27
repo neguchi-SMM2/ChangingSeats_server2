@@ -1,68 +1,88 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
+const http = require('http');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(cors());
-app.use(bodyParser.json());
-
+// 保存ファイル
 const DATA_FILE = path.join(__dirname, 'classData.json');
 
+// 初期化
 if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, JSON.stringify({}));
 }
 
 function loadData() {
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 }
 
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// 受け取るデータ：{ name: "名前", number1: 1, number2: 2, number3: 3, grade: 1, class: 2 }
-app.post('/register', (req, res) => {
-  const { name, number1, number2, number3, grade, class: classNum } = req.body;
+// HTTPサーバー + WebSocket サーバー作成（Renderで動作させるため）
+const server = http.createServer();
+const wss = new WebSocket.Server({ server });
 
-  if (!name || grade == null || classNum == null) {
-    return res.status(400).json({ message: '不正なデータです' });
-  }
+// クライアント接続時
+wss.on('connection', (ws) => {
+  console.log('クライアントが接続しました');
 
-  const data = loadData();
-  const classKey = `${grade}-${classNum}`;
+  ws.on('message', (message) => {
+    try {
+      const parsed = JSON.parse(message);
 
-  if (!data[classKey]) {
-    data[classKey] = [];
-  }
+      if (parsed.type === 'register') {
+        const { name, number1, number2, number3, grade, class: classNum } = parsed.data;
 
-  data[classKey].push({
-    name,
-    numbers: [number1, number2, number3],
-    timestamp: new Date().toISOString()
+        if (!name || grade == null || classNum == null) {
+          ws.send(JSON.stringify({ type: 'error', message: '不正なデータです' }));
+          return;
+        }
+
+        const data = loadData();
+        const classKey = `${grade}-${classNum}`;
+
+        if (!data[classKey]) {
+          data[classKey] = [];
+        }
+
+        data[classKey].push({
+          name,
+          numbers: [number1, number2, number3],
+          timestamp: new Date().toISOString()
+        });
+
+        saveData(data);
+        ws.send(JSON.stringify({ type: 'success', message: '登録成功' }));
+
+      } else if (parsed.type === 'get') {
+        const { grade, class: classNum } = parsed;
+
+        if (!grade || !classNum) {
+          ws.send(JSON.stringify({ type: 'error', message: '学年とクラスを指定してください' }));
+          return;
+        }
+
+        const data = loadData();
+        const classKey = `${grade}-${classNum}`;
+        const classData = data[classKey] || [];
+
+        ws.send(JSON.stringify({ type: 'data', classKey, data: classData }));
+      }
+
+    } catch (err) {
+      console.error('エラー:', err);
+      ws.send(JSON.stringify({ type: 'error', message: 'サーバー内部エラー' }));
+    }
   });
 
-  saveData(data);
-  res.json({ message: '登録成功' });
+  ws.on('close', () => {
+    console.log('クライアントが切断されました');
+  });
 });
 
-// GET /data?grade=1&class=2
-app.get('/data', (req, res) => {
-  const { grade, class: classNum } = req.query;
-
-  if (!grade || !classNum) {
-    return res.status(400).json({ message: '学年とクラスを指定してください' });
-  }
-
-  const data = loadData();
-  const classKey = `${grade}-${classNum}`;
-  res.json(data[classKey] || []);
-});
-
-// サーバー起動
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Renderのポート対応
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`WebSocketサーバーがポート${PORT}で起動しました`);
 });

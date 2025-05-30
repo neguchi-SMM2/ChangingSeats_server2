@@ -3,10 +3,8 @@ const path = require('path');
 const WebSocket = require('ws');
 const http = require('http');
 
-// 保存ファイル
 const DATA_FILE = path.join(__dirname, 'classData.json');
 
-// 初期化
 if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, JSON.stringify({}));
 }
@@ -19,11 +17,9 @@ function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// HTTPサーバー + WebSocket サーバー作成（Renderで動作させるため）
 const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
-// クライアント接続時
 wss.on('connection', (ws) => {
   console.log('クライアントが接続しました');
 
@@ -68,6 +64,35 @@ wss.on('connection', (ws) => {
         const classData = data[classKey] || [];
 
         ws.send(JSON.stringify({ type: 'data', classKey, data: classData }));
+
+      } else if (parsed.type === 'delete') {
+        const { grade, class: classNum, name } = parsed.data;
+
+        if (!grade || !classNum || !name) {
+          ws.send(JSON.stringify({ type: 'error', message: '削除条件が不完全です' }));
+          return;
+        }
+
+        const data = loadData();
+        const classKey = `${grade}-${classNum}`;
+
+        if (!data[classKey]) {
+          ws.send(JSON.stringify({ type: 'error', message: '該当クラスのデータが存在しません' }));
+          return;
+        }
+
+        const originalLength = data[classKey].length;
+        data[classKey] = data[classKey].filter(entry => entry.name !== name);
+
+        if (data[classKey].length < originalLength) {
+          saveData(data);
+          ws.send(JSON.stringify({ type: 'success', message: `${name} のデータを削除しました` }));
+        } else {
+          ws.send(JSON.stringify({ type: 'error', message: `${name} のデータが見つかりませんでした` }));
+        }
+
+      } else {
+        ws.send(JSON.stringify({ type: 'error', message: '不明なリクエストタイプです' }));
       }
 
     } catch (err) {
@@ -81,7 +106,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Renderのポート対応
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`WebSocketサーバーがポート${PORT}で起動しました`);

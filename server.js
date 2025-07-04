@@ -46,7 +46,7 @@ wss.on('connection', (ws) => {
           name,
           numbers: [number1, number2],
           timestamp: new Date().toISOString(),
-          message
+          message: message,
         });
 
         saveData(data);

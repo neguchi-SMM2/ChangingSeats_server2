@@ -28,7 +28,7 @@ wss.on('connection', (ws) => {
       const parsed = JSON.parse(message);
 
       if (parsed.type === 'register') {
-        const { name, number1, number2, grade, class: classNum } = parsed.data;
+        const { name, number1, number2, grade, class: classNum, message } = parsed.data;
 
         if (!name || grade == null || classNum == null) {
           ws.send(JSON.stringify({ type: 'error', message: '不正なデータです' }));
@@ -45,7 +45,8 @@ wss.on('connection', (ws) => {
         data[classKey].push({
           name,
           numbers: [number1, number2],
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          message
         });
 
         saveData(data);

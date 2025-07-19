@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const http = require('http');
 
 const DATA_FILE = path.join(__dirname, 'classData.json');
+let shimamura = 0;
 
 if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, JSON.stringify({}));
@@ -64,7 +65,7 @@ wss.on('connection', (ws) => {
         const classKey = `${grade}-${classNum}`;
         const classData = data[classKey] || [];
 
-        ws.send(JSON.stringify({ type: 'data', classKey, data: classData }));
+        ws.send(JSON.stringify({ type: 'data', classKey, data: classData, shimamura: shimamura }));
 
       } else if (parsed.type === 'delete') {
         const { grade, class: classNum, name } = parsed.data;
@@ -91,7 +92,9 @@ wss.on('connection', (ws) => {
         } else {
           ws.send(JSON.stringify({ type: 'error', message: `${name} のデータが見つかりませんでした` }));
         }
-
+      } else if (parsed.type === "shimamura") {
+        shimamura = 1;
+        ws.send(JSON.stringify({ type: 'success', message: `システムは正常に動作しました。` }));
       } else {
         ws.send(JSON.stringify({ type: 'error', message: '不明なリクエストタイプです' }));
       }
